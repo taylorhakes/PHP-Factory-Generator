@@ -1,12 +1,11 @@
 <?php
 /*
 PHP Factory Generator is a code generating tool. It will make objects out
-of all the tables in a specified in a MYSQL database and makes a single file to
-include to use them. It creates interfaces to the MYSQL as well. 
+of all the tables in a specified MYSQL database in a single file. It creates interfaces to the MYSQL as well. 
 It makes the functions: Create, CreateUpdate, Update, Retrieve and Delete functions
-for every table in a database and stores them in a single file.
-This allows a developer to use database tables like other PHP object
-and they do not have to worry about connecting to thethe MYSQL database  
+for every table in a database and stores them in the file.
+This file allows a developer to use database tables like other PHP objects
+and allows them to not worry about connecting to the MYSQL database  
 and closing connections. The code is all generated for you.
 
 */
@@ -32,19 +31,25 @@ if (mysqli_connect_errno()) {
 	printf("Connect failed: %s\n", mysqli_connect_error());
 	exit();
 }
+// Get all the databases in teh table schema
 $query = "SELECT DISTINCT TABLE_SCHEMA FROM TABLES WHERE TABLE_TYPE = 'BASE TABLE' AND ENGINE = 'MyISAM' AND TABLE_SCHEMA <> 'mysql'";
 $result = $connection->query($query);
 while ($obj = $result->fetch_object()) {
 	$databases[] = $obj->TABLE_SCHEMA;
 }
 
+// Get all the tables for the selected database
 $query = "SELECT DISTINCT TABLE_NAME FROM TABLES WHERE TABLE_SCHEMA = '$seldatabase'";
 $result = $connection->query($query);
 while ($obj = $result->fetch_object()) {
 	$tables[] = $obj->TABLE_NAME;
 }
+
+// Start the generated string
 $tablestring = '<?php
 	//This is PHP Generated Code From AutomatePHPMySQL. Be Careful editing this code, functions may become unstable. If you made a change to your database, recreate this file.';
+
+// Create the classe for each of the tables in the database
 foreach ($tables as $tab) {
 	$tablestring .= '
 	class '.$tab.'Object{';
@@ -57,6 +62,7 @@ foreach ($tables as $tab) {
 	$tablestring .= '}
 	';
 }
+// Add the connection info to the file
 $tablestring .= '
 	class '.$seldatabase.'
 	{
@@ -66,7 +72,7 @@ $tablestring .= '
 	private static $host = "'.$host.'";
 ';
 
-
+// Get the info about all the columns in the tables and create arrays for easy reference later
 foreach ($tables as $tab) {
 	$query = "SELECT * FROM COLUMNS WHERE TABLE_NAME = '$tab' AND TABLE_SCHEMA = '$seldatabase'";
 	$result = $connection->query($query);
@@ -135,6 +141,7 @@ foreach ($tables as $tab) {
 		if (mysqli_connect_errno()) {
 			return \'Connection Error: \'.mysqli_connect_error();
 		}';
+	// Make sure that their is a key on the table and the key is an auto increment key
 	if (!empty($key) && $key->auto) {
 		$tablestring .= '
 			$stmt = $connection->prepare("INSERT INTO '.$tab.' ('.implode(',', $main_column_names).') VALUES (';
@@ -144,6 +151,7 @@ foreach ($tables as $tab) {
 		}
 		$tablestring .= implode(',', $ques).')");
 		$stmt->bind_param("'.implode('', $main_column_types).'",'.implode(',', $main_column_objects).');';
+	// Otherwise just add the standard create function
 	} else {
 		$tablestring .= '
 		$stmt = $connection->prepare("INSERT INTO '.$tab.' ('.implode(',', $all_column_names).') VALUES (';
@@ -160,6 +168,8 @@ foreach ($tables as $tab) {
 		$error = $stmt->error;
 		$connection->close();
 		if(!empty($error)) return \'Error: \'.$error;';
+	
+	// If there is a auto increment key, return the key
 	if (!empty($key) && $key->auto) {
 		$tablestring .= '
 		$object->'.$key->name.'=$stmt->insert_id;';
@@ -173,6 +183,7 @@ foreach ($tables as $tab) {
 	$tablestring .= '
 	public static function CreateUpdate'.$tab.'Object($object = null)
 	{';
+	// Disable the function if there is no primary key
 	if (empty($key)) {
 		$tablestring .= '
 		return \'Function not supported. No table primary key\';';
@@ -189,6 +200,7 @@ foreach ($tables as $tab) {
 			return \'Connection Error: \'.mysqli_connect_error();
 		}
 		';
+		// Create a special function in their is an auto increment key
 		if (!empty($key) && $key->auto) {
 			$tablestring .= '
 			$stmt = $connection->prepare("INSERT INTO '.$tab.' ('.implode(',', $main_column_names).') VALUES (';
@@ -255,6 +267,7 @@ foreach ($tables as $tab) {
 	$tablestring .= '
 	public static function Retrieve'.$tab.'Object($'.(!empty($key) ? $key->name : 'unsupported').')
 	{';
+	// Disable the function if their is no key
 	if (empty($key))
 		$tablestring .= 'return \'Function not supported. No table primary key\';';
 	else {
@@ -281,6 +294,7 @@ foreach ($tables as $tab) {
 	$tablestring .= '
 	public static function Delete'.$tab.'Object($'.(!empty($key) ? $key->name : 'unsupported').')
 	{';
+	//Disable the function if their is no key
 	if (empty($key))
 		$tablestring .= 'return \'Function not supported. No table primary key\';';
 	else {
@@ -305,6 +319,7 @@ $tablestring .= '
 }
 ?>';
 
+// Write the finished string to the file path
 $fh = fopen($file_path, 'w+');
 fwrite($fh, $tablestring);
 fclose($fh);
